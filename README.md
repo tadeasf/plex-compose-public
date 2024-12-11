@@ -104,3 +104,85 @@ docker compose up -d
 * Media not showing up: Check permissions and paths
 * Transcoding issues: Verify hardware support
 * Remote access: Check port forwarding
+
+## Network & Security Setup
+
+### Default Port Configuration
+
+The service uses these ports:
+
+```yaml
+# When using network_mode: host
+- 32400/TCP  # Primary Plex communication
+- 32469/TCP  # DLNA server
+- 1900/UDP   # DLNA/SSDP discovery
+- 32410-32414/UDP  # GDM network discovery
+```
+
+### Secure Remote Access
+
+While Plex provides its own remote access system, you might want to expose the web interface directly through a reverse proxy. Here's how to set it up with Caddy:
+
+1. Install Caddy:
+
+    ```bash
+    sudo apt install -y debian-keyring debian-archive-keyring apt-transport-https
+    curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | sudo gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
+    curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | sudo tee /etc/apt/sources.list.d/caddy-stable.list
+    sudo apt update
+    sudo apt install caddy
+    ```
+
+2. Modify docker-compose.yml to use bridge network instead of host:
+
+    ```yaml
+    services:
+    plex:
+        network_mode: bridge
+        ports:
+        - "127.0.0.1:32400:32400"
+    ```
+
+3. Configure /etc/caddy/Caddyfile:
+
+    ```caddyfile
+    plex.yourdomain.com {
+        reverse_proxy localhost:32400 {
+            header_up X-Forwarded-Proto {scheme}
+            header_up X-Forwarded-Host {host}
+            header_up Host {upstream_hostport}
+        }
+        tls {
+            protocols tls1.3
+        }
+        encode gzip
+        header {
+            # Security headers
+            Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+            X-Content-Type-Options "nosniff"
+            X-Frame-Options "SAMEORIGIN"  # Plex needs this for embedding
+            Referrer-Policy "strict-origin-when-cross-origin"
+        }
+    }
+    ```
+
+4. Restart Caddy:
+
+    ```bash
+    sudo systemctl reload caddy
+    ```
+
+5. Additional Plex Settings:
+   * In Plex Settings → Network:
+     * Custom server access URLs: Add `https://plex.yourdomain.com`
+     * Secure connections: Required or Preferred
+     * Enable SSL certificate verification
+
+### Important Security Notes
+
+Always use strong passwords
+
+* Keep your system and Plex updated
+* Consider using Fail2ban for additional protection
+* Regular security audits recommended
+* Backup your SSL certificates and Caddy configuration
