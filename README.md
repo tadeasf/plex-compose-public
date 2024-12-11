@@ -104,7 +104,3 @@ docker compose up -d
 * Media not showing up: Check permissions and paths
 * Transcoding issues: Verify hardware support
 * Remote access: Check port forwarding
-
-## License
-
-Software licensed under my beloved *GPL-3.0*
